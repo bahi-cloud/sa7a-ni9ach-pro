@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f0c29">
+<title>ساحة النقاش الذكي — MCP Tools & Task Execution</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Cairo',sans-serif}
+:root{--bg1:#0f0c29;--bg2:#302b63;--bg3:#24243e;--glass:rgba(255,255,255,.06);--line:rgba(255,255,255,.1);--muted:#8b93a7;--accent:#6366f1}
+html,body{min-height:100%;background:linear-gradient(135deg,var(--bg1),var(--bg2) 50%,var(--bg3));color:#fff}
+body{padding:8px;overflow-x:hidden}
+button,input,select{font:inherit}
+button{touch-action:manipulation}
+.app{width:min(900px,100%);margin:auto;display:flex;flex-direction:column;gap:8px}
+.panel{background:rgba(255,255,255,.055);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:14px;padding:10px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+.header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.logo{font-size:19px;font-weight:900;background:linear-gradient(90deg,#fbbf24,#22d3ee,#a78bfa,#fb7185,#34d399);background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 4s linear infinite;white-space:nowrap}
+@keyframes shimmer{to{background-position:300% center}}
+.btn{cursor:pointer;border:0;outline:0;border-radius:10px;font-weight:700;font-size:12px;transition:.15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
+.btn:active{transform:scale(.97)}.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-sm{background:rgba(255,255,255,.07);color:#ccc;padding:6px 10px;border:1px solid rgba(255,255,255,.08)}
+.btn-main{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:9px 16px}
+.btn-ghost{background:rgba(0,0,0,.2);color:#cbd5e1;border:1px solid rgba(255,255,255,.08);padding:7px 10px}
+.btn-tool{background:rgba(34,211,238,.1);color:#67e8f9;border:1px solid rgba(34,211,238,.2);padding:7px 10px}
+.inp,.sel{background:rgba(0,0,0,.35);color:#fff;border:1px solid rgba(255,255,255,.1);border-radius:10px;outline:0}
+.inp{width:100%;padding:9px 12px;font-size:13px}.sel{padding:8px 10px;font-size:12px}
+.sel option{background:#1e1b3a;color:#fff}.inp:focus,.sel:focus{border-color:rgba(99,102,241,.65);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+.fx{display:flex}.aic{align-items:center}.jcb{justify-content:space-between}.g1{gap:4px}.g2{gap:7px}.fs0{flex-shrink:0}.f1{flex:1}.hidden{display:none!important}.txc{text-align:center}
+.top-actions{display:flex;gap:5px;overflow-x:auto;max-width:58vw;padding:1px}.top-actions::-webkit-scrollbar,.hscroll::-webkit-scrollbar{display:none}
+
+/* ===== تبديل وضع العمل ===== */
+.mode-switch-bar { display:flex; background:rgba(0,0,0,.3); border-radius:12px; padding:3px; gap:4px; border:1px solid rgba(255,255,255,.08); }
+.mode-tab { flex:1; text-align:center; padding:6px 12px; font-size:12px; font-weight:700; border-radius:9px; cursor:pointer; color:#8b93a7; transition:.2s; border:none; background:none; }
+.mode-tab.active { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; box-shadow:0 2px 10px rgba(99,102,241,.3); }
+
+/* ===== لوحة تنفيذ المهام ===== */
+.task-panel { display:none; flex-direction:column; gap:8px; animation:fadeIn .3s; }
+.task-panel.show { display:flex; }
+.task-progress-bar { height:6px; background:rgba(255,255,255,.08); border-radius:10px; overflow:hidden; }
+.task-progress-fill { height:100%; width:0%; background:linear-gradient(90deg,#34d399,#22d3ee); transition:width .3s; }
+.subtask-item { background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.06); border-radius:10px; padding:8px 10px; font-size:11px; display:flex; flex-direction:column; gap:4px; margin-bottom:5px; }
+.subtask-header { display:flex; justify-content:space-between; align-items:center; }
+.subtask-status { font-size:9px; padding:2px 6px; border-radius:6px; font-weight:700; }
+.status-pending { background:rgba(156,163,175,.2); color:#9ca3af; }
+.status-running { background:rgba(34,211,238,.2); color:#67e8f9; }
+.status-review { background:rgba(251,191,36,.2); color:#fbbf24; }
+.status-completed { background:rgba(52,211,153,.2); color:#6ee7b7; }
+.status-failed { background:rgba(248,113,113,.2); color:#f87171; }
+
+/* ===== الأدوات ===== */
+.tools-popup { position: absolute; bottom: 65px; left: 0; right: 0; background: rgba(15,12,41,0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 12px; max-height: 350px; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.6); z-index: 100; backdrop-filter: blur(20px); }
+.tools-popup.hidden { display: none; }
+.tools-popup .tools-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px; font-size: 13px; font-weight: 700; color: #a5b4fc; }
+.tool-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; margin-bottom: 2px; transition: background 0.15s; }
+.tool-item:hover { background: rgba(255,255,255,0.04); }
+.tool-item .info { flex: 1; min-width: 0; }
+.tool-item .name { font-size: 12px; font-weight: 600; direction: ltr; text-align: right; }
+.tool-item .desc { font-size: 10px; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-test-btn { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: #9ca3af; padding: 2px 8px; border-radius: 6px; cursor: pointer; font-size: 10px; transition: all 0.15s; }
+.tool-test-btn:hover { color: #a5b4fc; border-color: rgba(99,102,241,0.3); }
+
+/* Switch */
+.switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; background: rgba(255,255,255,0.1); border-radius: 20px; cursor: pointer; transition: 0.2s; }
+.slider::before { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #6b7280; top: 3px; right: 3px; transition: 0.2s; }
+.switch input:checked+.slider { background: rgba(99,102,241,0.6); }
+.switch input:checked+.slider::before { background: #818cf8; transform: translateX(-16px); }
+
+/* شارات الأدوات المفعّلة */
+.tool-badge { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 2px 10px; font-size: 10px; color: #a5b4fc; }
+.tool-badge.active { border-color: rgba(52,211,153,0.3); color: #6ee7b7; }
+
+/* رسالة نتيجة الأداة */
+.msg-tool { background: rgba(52,211,153,0.06) !important; border: 1px solid rgba(52,211,153,0.15) !important; border-radius: 12px !important; padding: 10px 14px !important; margin: 6px 0 !important; max-width: 95% !important; align-self: center !important; }
+.msg-tool .tool-label { font-size: 11px; color: #6ee7b7; font-weight: 600; }
+.msg-tool .tool-result { font-size: 12px; color: #d1d5db; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
+.msg-tool .tool-error { color: #f87171; }
+
+.section-title{font-size:10px;color:#8f96a8;font-weight:700;margin:0 0 6px}
+.hscroll{display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;padding:2px 1px 5px;-webkit-overflow-scrolling:touch}
+.hscroll>*{flex:0 0 auto;scroll-snap-align:start}
+.chip{min-width:max-content;border-radius:12px;padding:7px 10px;background:rgba(0,0,0,.27);border:1px solid rgba(255,255,255,.08);color:#aeb5c4;cursor:pointer;transition:.18s;user-select:none}
+.chip.active{background:rgba(99,102,241,.18);border-color:rgba(129,140,248,.65);color:#fff;box-shadow:0 0 14px rgba(99,102,241,.12)}
+.bot-chip{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:12px;cursor:pointer;user-select:none;transition:.2s;border:1px solid transparent;background:rgba(0,0,0,.3);opacity:.34}
+.bot-chip.on{opacity:1}.bot-chip .chip-emoji{font-size:18px}.bot-chip .chip-name{font-size:11px;font-weight:700;white-space:nowrap}
+.chip-check{width:15px;height:15px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid #555}
+.bot-chip.on .chip-check{background:rgba(255,255,255,.15);border-color:currentColor}
+.dimension-card{min-width:132px;background:rgba(0,0,0,.23);border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:7px 9px}
+.dim-head{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#aeb5c4;margin-bottom:3px}.dim-val{font-weight:900;color:#fff}
+.range{width:100%;height:4px;accent-color:#818cf8;cursor:pointer}
+.topic-grid{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center}
+.mode-row{display:flex;gap:7px;align-items:center;margin-top:7px;overflow-x:auto;padding-bottom:1px}.mode-row>*{flex:0 0 auto}
+.mode-row .sel{min-width:215px}.mode-label{font-size:10px;color:#9299aa;font-weight:700}
+.sum-btn{background:linear-gradient(135deg,#92400e,#d97706);color:#fff;border:0;border-radius:10px;padding:7px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.chat-box{height:48vh;min-height:330px;max-height:650px;overflow-y:auto;scroll-behavior:smooth;display:flex;flex-direction:column;gap:7px;padding:3px}
+.chat-box::-webkit-scrollbar{width:4px}.chat-box::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:10px}
+.msg{border-radius:12px;padding:9px 11px;animation:slideIn .3s;border-right:4px solid}
+.msg-sys{background:rgba(251,191,36,.07);border:1px dashed rgba(251,191,36,.3);text-align:center;padding:5px;border-radius:8px;animation:fadeIn .3s}
+.msg-sys span{font-size:11px;color:rgba(251,191,36,.85)}
+.msg-summary{border-radius:12px;padding:11px 13px;border:2px solid rgba(251,191,36,.4);background:rgba(251,191,36,.06)!important;position:relative}
+.msg-summary:before{content:'📋 المخرج النهائي';position:absolute;top:-10px;right:13px;background:#302b63;padding:2px 9px;border-radius:20px;font-size:9px;font-weight:700;color:#fbbf24;border:1px solid rgba(251,191,36,.4)}
+@keyframes slideIn{from{opacity:0;transform:translateX(15px)}to{opacity:1;transform:translateX(0)}}@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.msg-header{display:flex;align-items:center;gap:6px;margin-bottom:4px}.msg-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid;flex-shrink:0}
+.msg-name{font-size:11px;font-weight:700}.msg-time{font-size:9px;color:#4b5563}.msg-speak-btn{background:none;border:0;cursor:pointer;font-size:12px;padding:2px;color:#737b8c;margin-right:auto}.msg-text{font-size:12.5px;color:#e5e7eb;line-height:1.75}
+.typing-bar{display:none;padding:4px 6px}.typing-bar.show{display:flex}.typing-inner{display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.3);border-radius:10px;padding:6px 10px}.t-name{font-size:10px;font-weight:700}.t-label{font-size:10px;color:#6b7280}
+.dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#888;animation:bounce 1.4s infinite}.dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+.status-bar{display:flex;align-items:center;justify-content:space-between;gap:7px}.status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}.status-text{font-size:10px;color:#9ca3af}
+.wave{display:none;align-items:center;gap:2px;margin-right:4px}.wave.show{display:flex}.wave-bar{width:3px;border-radius:3px;background:#34d399;animation:wv .8s infinite}.wave-bar:nth-child(2){animation-delay:.1s}.wave-bar:nth-child(3){animation-delay:.15s}.wave-bar:nth-child(4){animation-delay:.25s}
+@keyframes wv{0%,100%{height:6px}50%{height:16px}}@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(99,102,241,.45)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 rgba(99,102,241,0)}}.pulsing{animation:pulse 2s infinite}
+.int-row{display:flex;gap:6px;position:relative}.int-row .inp{min-width:0}
+.rate-section{padding-top:7px}.rate-item{margin-bottom:5px}.rate-label{display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px}.rate-track{height:4px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden}.rate-fill{height:100%;border-radius:5px;transition:.4s}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(4px);z-index:100;display:none;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}.modal-box{background:rgba(15,12,41,.97);border:1px solid rgba(255,255,255,.12);border-radius:18px 18px 0 0;width:min(600px,100%);max-height:88vh;overflow:auto;padding:16px}
+.modal-title{font-size:15px;font-weight:900}.field{margin-bottom:12px}.field label{display:block;color:#cbd5e1;font-size:11px;font-weight:700;margin-bottom:5px}
+.save-note{font-size:9px;color:#687084;margin-top:4px}
+.rail-wrap{position:relative}.rail-hint{font-size:9px;color:#555;margin-top:4px}
+.rounds-row{display:flex;gap:7px;overflow-x:auto;padding:3px 1px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}.rounds-row::-webkit-scrollbar{display:none}
+.round-chip{scroll-snap-align:start;flex:0 0 auto;min-width:68px;padding:8px 10px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.24);color:#9ca3af;font-size:11px;font-weight:700;cursor:pointer;text-align:center;transition:.18s}.round-chip.active{color:#fff;border-color:rgba(99,102,241,.7);background:rgba(99,102,241,.18);box-shadow:0 0 14px rgba(99,102,241,.12)}.round-chip small{display:block;font-size:8px;color:#626b7b;margin-top:2px}
+.round-progress{height:5px;border-radius:10px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}.round-progress>span{display:block;height:100%;width:0;background:linear-gradient(90deg,#6366f1,#22d3ee,#34d399);transition:width .3s}
+.mode-rail{display:flex;gap:7px;overflow-x:auto;padding:3px 1px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}.mode-rail::-webkit-scrollbar{display:none}
+.mode-chip{flex:0 0 auto;scroll-snap-align:start;padding:8px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.24);color:#aeb5c4;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:.18s}.mode-chip.active{color:#fff;background:rgba(99,102,241,.18);border-color:rgba(129,140,248,.7);box-shadow:0 0 12px rgba(99,102,241,.1)}
+.session-meta{display:flex;gap:6px;overflow-x:auto;margin-top:7px}.session-meta::-webkit-scrollbar{display:none}.meta-pill{flex:0 0 auto;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);font-size:9px;color:#9ca3af}
+.export-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.export-card{padding:9px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.2);border-radius:11px;cursor:pointer;color:#cbd5e1;font-size:10px;text-align:center}.export-card:hover{background:rgba(255,255,255,.07)}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px}.stat-card{background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:7px;text-align:center}.stat-card b{display:block;font-size:15px}.stat-card span{font-size:8px;color:#6b7280}
+.table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.07);border-radius:10px;margin-top:8px}.table-wrap table{width:100%;border-collapse:collapse;font-size:10px}.table-wrap th,.table-wrap td{padding:6px;border-bottom:1px solid rgba(255,255,255,.06);text-align:right}.table-wrap th{background:rgba(99,102,241,.1);color:#c4b5fd}.table-wrap td{color:#cbd5e1}.hidden-select{display:none!important}
+@media(max-width:560px){.export-grid{grid-template-columns:1fr 1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}.round-chip{min-width:60px}.mode-chip{font-size:10px;padding:7px 9px}}
+@media(min-width:650px){.modal-bg{align-items:center}.modal-box{border-radius:16px;width:92%;max-width:520px}.chat-box{height:50vh}}
+@media(max-width:520px){body{padding:5px}.app{gap:6px}.panel{padding:8px}.logo{font-size:17px}.top-actions{max-width:65vw}.topic-grid{grid-template-columns:1fr auto}.topic-grid #startBtn{grid-column:1/-1;width:100%}.mode-row .sel{min-width:200px}.chat-box{height:49vh;min-height:300px}.status-bar{align-items:flex-start}.ctrl-row{width:100%}.ctrl-row .btn{flex:1}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ===== الهيكل الأصلي مع شريط اختيار الوضع ===== -->
+<div class="panel header">
+  <span class="logo">⚡ ساحة النقاش والمهام</span>
+  <div class="top-actions">
+    <button onclick="toggleSpeaker()" id="spkBtn" class="btn btn-sm"><span id="spkIcon">🔇</span><span id="spkLabel">الصوت</span></button>
+    <button onclick="cycleSpeed()" id="speedBtn" class="btn btn-sm">🚗 عادي</button>
+    <button onclick="openSettings()" class="btn btn-sm">⚙️</button>
+  </div>
+</div>
+
+<!-- شريط تبديل الوضع -->
+<div class="mode-switch-bar">
+  <button class="mode-tab active" id="tabDiscussion" onclick="switchAppMode('discussion')">🎭 وضع النقاش</button>
+  <button class="mode-tab" id="tabTask" onclick="switchAppMode('task')">⚡ تنفيذ المهام</button>
+</div>
+
+<!-- ===== أدوات النقاش (الأصلية) ===== -->
+<div id="discussionControls" style="display:flex; flex-direction:column; gap:8px;">
+  <div class="panel">
+    <div class="section-title">🤖 الشخصيات</div>
+    <div class="hscroll" id="botsRow"></div>
+  </div>
+  <div class="panel">
+    <div class="section-title">🧠 أبعاد التفكير</div>
+    <div class="hscroll" id="dimensionsRow"></div>
+  </div>
+  <div class="panel">
+    <div class="section-title">🔭 عدسة النقاش</div>
+    <div class="hscroll" id="lensesRow"></div>
+  </div>
+  <div class="panel rail-wrap">
+    <div class="section-title">🔄 الجولات</div>
+    <div class="rounds-row" id="roundsRow"></div>
+    <div class="round-progress"><span id="roundProgress"></span></div>
+    <div class="session-meta"><span class="meta-pill" id="roundMeta">الجولة 0</span><span class="meta-pill" id="modeMeta">🎭 نقاش حر</span><span class="meta-pill" id="lensMeta">🔭 متوازن</span><span class="meta-pill" id="dimensionMeta">🧠 متوازن</span></div>
+  </div>
+  <div class="panel rail-wrap">
+    <div class="section-title">🎯 نوع الجلسة</div>
+    <div class="mode-rail" id="modeRail"></div>
+    <select id="modeSelect" class="sel hidden-select" onchange="onModeChange(this.value)"></select>
+  </div>
+</div>
+
+<!-- ===== لوحة تنفيذ المهام ===== -->
+<div class="panel task-panel" id="taskControlPanel">
+  <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+    <span>📋 حالة المهمة</span>
+    <span id="taskOverallStatus" style="font-size:9px; color:#22d3ee;">جاهز</span>
+  </div>
+  <div class="task-progress-bar">
+    <div class="task-progress-fill" id="taskProgressBar"></div>
+  </div>
+  <div id="subtasksContainer" style="margin-top:6px; max-height:200px; overflow-y:auto;">
+    <div style="text-align:center; color:#6b7280; font-size:11px; padding:10px;">أدخل مهمة ليقوم المذيع بتخطيطها وتنفيذها</div>
+  </div>
+</div>
+
+<!-- ===== منطقة الإدخال ===== -->
+<div class="panel">
+  <div class="topic-grid">
+    <input id="topicInput" class="inp" placeholder="أدخل الموضوع أو المهمة..." onkeydown="if(event.key==='Enter')handleMainAction()">
+    <select id="timerSelect" class="sel">
+      <option value="0">⏱ تلقائي</option><option value="5">⏱ 5ث</option><option value="10" selected>⏱ 10ث</option>
+      <option value="15">⏱ 15ث</option><option value="20">⏱ 20ث</option><option value="30">⏱ 30ث</option>
+      <option value="45">⏱ 45ث</option><option value="60">⏱ 60ث</option><option value="90">⏱ 90ث</option><option value="120">⏱ 120ث</option>
+    </select>
+    <button onclick="handleMainAction()" id="startBtn" class="btn btn-main">🚀 ابدأ</button>
+  </div>
+  <div class="mode-row">
+    <span class="mode-label">🧩 أدوات الجلسة</span>
+    <button class="sum-btn" onclick="triggerSummary()">📋 ملخص</button>
+    <button class="btn btn-sm" onclick="showSessionStats()">📊 إحصاءات</button>
+    <button class="btn btn-sm" onclick="openExportMenu()">📤 تصدير</button>
+  </div>
+</div>
+
+<!-- ===== شريط الحالة ===== -->
+<div class="panel status-bar">
+  <div class="fx aic g2">
+    <div class="status-dot" id="sDot" style="background:#6b7280"></div><span class="status-text" id="sText">في انتظار البدء...</span>
+    <div class="wave" id="waveEl"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div>
+  </div>
+  <div class="ctrl-row fx g1">
+    <button onclick="pauseDebate()" id="pauseBtn" disabled class="btn btn-sm" style="color:#fbbf24">⏸</button>
+    <button onclick="resumeDebate()" id="resumeBtn" disabled class="btn btn-sm" style="color:#34d399">▶</button>
+    <button onclick="newChat()" class="btn btn-sm" style="color:#fb7185">🔄</button>
+    <button onclick="exportChat()" class="btn btn-sm" style="color:#a78bfa">📥</button>
+  </div>
+</div>
+
+<!-- ===== ساحة المحادثة ===== -->
+<div class="panel" style="padding:7px">
+  <div class="chat-box" id="chatArea">
+    <div class="txc" style="padding:40px 10px" id="welcomeMsg">
+      <div style="font-size:42px;margin-bottom:8px">🎭</div>
+      <div style="font-size:15px;font-weight:700;color:#ccc">ساحة النقاش والمهام الذكية</div>
+      <div style="font-size:11px;color:#666;max-width:340px;margin:3px auto">اختر النمط المناسب وابدأ</div>
+    </div>
+  </div>
+  <div class="typing-bar" id="typingBar"><div class="typing-inner"><span id="tEmoji">🎙️</span><span id="tName" class="t-name" style="color:#fbbf24">المذيع</span><span class="t-label">يفكر</span><span class="fx g1" style="margin-right:3px"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div></div>
+</div>
+
+<!-- ===== لوحات إضافية ===== -->
+<div class="panel" id="analyticsPanel" style="display:none">
+  <div class="section-title">📈 إحصاءات الجلسة</div>
+  <div id="analyticsContent"></div>
+</div>
+
+<div class="panel" id="exportPanel" style="display:none">
+  <div class="section-title">📤 تصدير</div>
+  <div class="export-grid">
+    <button class="export-card" onclick="exportChat('html')">🌐 HTML</button>
+    <button class="export-card" onclick="exportChat('txt')">📄 TXT</button>
+    <button class="export-card" onclick="exportChat('csv')">📊 CSV</button>
+    <button class="export-card" onclick="exportChat('json')">🧩 JSON</button>
+  </div>
+</div>
+
+<!-- ===== الأدوات ===== -->
+<div class="panel">
+  <div class="int-row" style="position:relative;">
+    <button id="toolsToggleBtn" class="btn btn-tool" style="font-size:20px;padding:8px 12px;" title="إدارة الأدوات">➕</button>
+    <input id="intInput" class="inp" placeholder="تدخل سريع..." onkeydown="if(event.key==='Enter')interrupt()">
+    <button onclick="interrupt()" class="btn btn-main">✋ قاطع</button>
+  </div>
+  
+  <div id="toolsPopup" class="tools-popup hidden">
+    <div class="tools-header">
+      <span>🧰 أدوات MCP</span>
+      <button onclick="document.getElementById('toolsPopup').classList.add('hidden')" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:18px;">✕</button>
+    </div>
+    <div id="toolsList"><div style="text-align:center;color:#6b7280;padding:16px;font-size:13px;">⏳ جارٍ التحميل...</div></div>
+    <div style="padding:8px 4px 0;border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:10px;color:#6b7280;" id="mcpStatus">🔌 جارٍ التحميل...</span>
+      <button onclick="loadMCPTools()" style="background:none;border:none;color:#818cf8;cursor:pointer;font-size:11px;">⟳ تحديث</button>
+    </div>
+  </div>
+  
+  <div id="activeToolsBadge" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;min-height:20px;"></div>
+</div>
+
+<!-- ===== حدود الطلبات ===== -->
+<div class="panel rate-section">
+  <div class="section-title">📊 حدود الطلبات (40/دقيقة)</div><div id="rateBars"></div>
+</div>
+<div class="txc" style="padding:3px"><span style="font-size:9px;color:#444">مبني بـ ❤️ | MCP Tools متكاملة</span></div>
+</div>
+
+<!-- ===== الإعدادات ===== -->
+<div class="modal-bg" id="settingsModal">
+<div class="modal-box">
+  <div class="fx aic jcb"><span class="modal-title">⚙️ الإعدادات</span><button onclick="closeSettings()" class="btn btn-ghost">✕</button></div>
+  <div class="field">
+    <label>🔑 مفتاح API</label>
+    <div class="fx g2"><input type="password" id="apiKeyInput" placeholder="sk-..." dir="ltr" class="inp"><button onclick="saveKey()" class="btn btn-main">حفظ</button></div>
+    <p id="keyStatus" class="save-note"></p>
+  </div>
+  <div class="field">
+    <label>🎤 سرعة الكلام: <span id="speedVal">1.0x</span></label>
+    <input type="range" id="speechRange" min=".5" max="2" step=".1" value="1" class="range" oninput="speechSpd=parseFloat(this.value);document.getElementById('speedVal').textContent=this.value+'x'">
+  </div>
+  <div id="advancedSettings" class="hidden">
+    <div class="field">
+      <label>🧠 الحد الأقصى لسجل السياق</label>
+      <input type="range" id="histRange" min="8" max="32" step="2" value="16" class="range" oninput="MAX_HIST=parseInt(this.value);document.getElementById('histVal').textContent=this.value">
+      <span id="histVal" class="save-note">16</span>
+    </div>
+    <div class="field">
+      <label>🔌 MCP Server URL</label>
+      <input type="text" id="mcpUrl" value="https://ayb-bh92-mcp.hf.space" class="inp" dir="ltr">
+      <button onclick="testMCPConnection()" class="btn btn-sm" style="margin-top:4px;">🔗 اختبار</button>
+      <p id="mcpStatusSettings" class="save-note">⚠️ تأكد من تشغيل الخادم</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// =========================================================
+//  الكود الأصلي + نظام تنفيذ المهام بقيادة المذيع
+// =========================================================
+
+/* ===== 1. المتغيرات الأساسية ===== */
+var API_URL = 'https://ayb-bh92-wep2app.hf.space/v1/chat/completions';
+var MCP_URL = 'https://ayb-bh92-mcp.hf.space';
+
+var BOTS = [
+{id:'anchor',name:'المذيع',emoji:'🎙️',color:'#fbbf24',bg:'rgba(251,191,36,.12)',model:'claude-opus-4-6',
+ prompts:{debate:'أنت مذيع حوار ذكي. قدّم الموضوع، نظّم النقاش، واطرح أسئلة محفزة. عربية فصحى بسيطة. 2-3 جمل.',problem:'أنت مدير جلسة حل مشاكل. وجّه النقاش نحو الحلول العملية. اسأل: ما الأسباب الجذرية؟ ما الخيارات المتاحة؟ 2-3 جمل.',decision:'أنت مدير جلسة قرار. ساعد على تقييم كل خيار. اسأل عن المعايير والأولويات. 2-3 جمل.',analysis:'أنت مدير تحليل. قسّم الموضوع لأجزاء، اسأل عن كل جانب. 2-3 جمل.',brainstorm:'أنت مدير عصف ذهني. شجّع الأفكار الجديدة، لا تنتقد. 2-3 جمل.',risk:'أنت مدير تقييم مخاطر. اسأل عن المخاطر المحتملة والفوائد. 2-3 جمل.',plan:'أنت مدير تخطيط. ساعد على تحديد الخطوات التنفيذية. اسأل: ما الخطوة الأولى؟ من المسؤول؟ 2-3 جمل.'},voice:{pitch:1,rate:1},on:true},
+{id:'scientist',name:'العالِم',emoji:'🔬',color:'#22d3ee',bg:'rgba(34,211,238,.12)',model:'claude-opus-4-6',
+ prompts:{debate:'أنت عالم منطقي. استند للحقائق والأدلة. عربية. 2-3 جمل.',problem:'أنت خبير تقني. حلّل المشكلة علمياً. اقترح حلولاً مبنية على بيانات. 2-3 جمل.',decision:'أنت محلل بيانات. قيّم الخيارات بأرقام ونسب. 2-3 جمل.',analysis:'أنت عالم تحليل. فكّك المشكلة لمكوناتها الأساسية. 2-3 جمل.',brainstorm:'أنت مبتكر تقني. اقترح حلولاً تكنولوجية جديدة. 2-3 جمل.',risk:'أنت محلل مخاطر. قيّم الاحتمالات والتأثيرات بدقة. 2-3 جمل.',plan:'أنت مهندس تنفيذ. حدّد الخطوات التقنية والموارد المطلوبة. 2-3 جمل.'},voice:{pitch:.85,rate:.95},on:true},
+{id:'philosopher',name:'الفيلسوف',emoji:'📜',color:'#a78bfa',bg:'rgba(167,139,250,.12)',model:'claude-opus-4-6',
+ prompts:{debate:'أنت فيلسوف عميق. ربط الأفكار بالحكمة والتاريخ. أسلوب تأملي. 2-3 جمل.',problem:'أنت فيلسوف عملي. تساءل: ما جذر المشكلة؟ هل نحل السبب أم الأعراض؟ 2-3 جمل.',decision:'أنت مفكر أخلاقي. قيّم القرارات من منظور القيم والمبادئ. 2-3 جمل.',analysis:'أنت مفكر نقدي. اسأل عن المسلمات الخفية والافتراضات. 2-3 جمل.',brainstorm:'أنت فيلسوف إبداعي. اقترح أفكاراً من خارج الصندوق. 2-3 جمل.',risk:'أنت حكيم. تأمل العواقب بعيدة المدى. 2-3 جمل.',plan:'أنت استراتيجي. ضع الخطة في سياقها الأكبر والغاية النهائية. 2-3 جمل.'},voice:{pitch:.7,rate:.82},on:true},
+{id:'skeptic',name:'المشكّك',emoji:'🔍',color:'#fb7185',bg:'rgba(251,113,133,.12)',model:'claude-opus-4-6',
+ prompts:{debate:'أنت ناقد ذكي. شكّك في كل فكرة، ابحث عن الثغرات. حاد ومحترم. 2-3 جمل.',problem:'أنت محقق. اسأل: هل هذا فعلاً مشكلة؟ من يستفيد منها؟ ما الثمن الحقيقي؟ 2-3 جمل.',decision:'أنت مشكك في القرارات. اسأل: ما الذي يُخفى؟ من تضرر؟ هل الخيارات صحيحة؟ 2-3 جمل.',analysis:'أنت ناقد. اكشف التناقضات والافتراضات الخاطئة. 2-3 جمل.',brainstorm:'أنت مختبر. اسأل: هل هذه الفكرة ممكنة فعلاً؟ ما تكلفتها؟ 2-3 جمل.',risk:'أنت متشائم بنّاء. عدّد كل المخاطر الممكنة حتى الصغيرة. 2-3 جمل.',plan:'أنت محلل ثغرات. ابحث عن الخطوات الضعيفة في الخطة. 2-3 جمل.'},voice:{pitch:1.15,rate:1.1},on:false},
+{id:'summarizer',name:'الملخّص',emoji:'📋',color:'#fbbf24',bg:'rgba(251,191,36,.10)',model:'claude-opus-4-6',
+ prompts:{debate:'أنت ملخّص محترف. دورك يبدأ فقط عندما تُطلب. لخّص النقاش: النقاط الرئيسية، التوافقات، الخلافات. منظم ومختصر. 4-6 جمل.',problem:'أنت ملخّص حلول. لخّص: المشكلة الأساسية، الحلول المقترحة، الإجماع والخلاف. 4-6 جمل.',decision:'أنت ملخّص قرارات. لخّص: الخيارات المطروحة، إيجابيات وسلبيات كل خيار، التوجه العام. 4-6 جمل.',analysis:'أنت ملخّص تحليل. لخّص الجوانب المكتشفة والنقاط الرئيسية. 4-6 جمل.',brainstorm:'أنت ملخّص أفكار. صنّف الأفكار واجمع المتشابهة. 4-6 جمل.',risk:'أنت ملخّص مخاطر. قائمة بأهم المخاطر والفرص مرتبة حسب الأهمية. 4-6 جمل.',plan:'أنت ملخّص خطة. لخّص الخطوات المتفق عليها والمسؤوليات. 4-6 جمل.'},voice:{pitch:.88,rate:.9},on:false,isSummarizer:true,summaryEvery:5}
+];
+
+var apiKey = ''; try { apiKey = localStorage.getItem('api_key') || ''; } catch(e) {}
+var roundNumber = 0, totalRounds = 5, roundInfinite = false, roundTurnCount = 0, selectedMode = 'debate';
+var globalSpk = false, speechSpd = 1, spdMode = 'normal', running = false, paused = false, topic = '', debateMode = 'debate';
+var hist = [], turn = 0, msgN = 0, msgsSinceSummary = 0, abortC = null, debateTimer = null, speaking = false, speakMsgId = null, MAX_HIST = 16;
+var rLog = {};
+
+/* ===== متغيرات الوضع ===== */
+var currentAppMode = 'discussion';
+
+// ===== أدوات MCP =====
+var mcpTools = [];
+var enabledMCPTools = [];
+try { enabledMCPTools = JSON.parse(localStorage.getItem('enabled_mcp_tools') || '[]'); } catch(e) { enabledMCPTools = []; }
+
+// ===== متغيرات تنفيذ المهام (بقيادة المذيع) =====
+var taskRunning = false;
+var taskPaused = false;
+var currentTaskData = null;
+var taskAbortController = null;
+
+/* ===== دوال مساعدة ===== */
+function rCount(m){ if(!rLog[m]) rLog[m]=[]; var n=Date.now(); rLog[m]=rLog[m].filter(function(t){ return t>n-60000 }); return rLog[m].length }
+function rRecord(m){ if(!rLog[m]) rLog[m]=[]; rLog[m].push(Date.now()) }
+function rCan(m){ return rCount(m) < 40 }
+function rDelay(m){ var c=rCount(m); if(c>=36) return 6000; if(c>=30) return 4000; if(c>=24) return 2000; if(c>=18) return 1000; return 0 }
+function activeBots(){ return BOTS.filter(function(b){ return b.on && !b.isSummarizer }) }
+function getSummarizer(){ return BOTS.find(function(b){ return b.isSummarizer && b.on }) || null }
+function findBot(id){ return BOTS.find(function(b){ return b.id===id }) || null }
+function escH(t){ var d=document.createElement('div'); d.textContent=t; return d.innerHTML }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms) }) }
+
+var MODE_INFO = {
+ debate:{label:'نقاش حر',icon:'🎭',color:'#a78bfa',placeholder:'مثال: هل الذكاء الاصطناعي سيحل محل البشر؟'},
+ problem:{label:'حل مشكلة',icon:'🔧',color:'#fb7185',placeholder:'مثال: موظف لا يلتزم بالمواعيد، كيف أتعامل معه؟'},
+ decision:{label:'اتخاذ قرار',icon:'⚖️',color:'#22d3ee',placeholder:'مثال: هل أتوسع في مشروعي الآن أم أنتظر؟'},
+ analysis:{label:'تحليل عميق',icon:'🔍',color:'#f59e0b',placeholder:'مثال: لماذا تفشل الشركات الناشئة في السنة الأولى؟'},
+ brainstorm:{label:'عصف ذهني',icon:'💡',color:'#34d399',placeholder:'مثال: كيف نزيد المبيعات بميزانية محدودة؟'},
+ risk:{label:'تقييم مخاطر',icon:'⚠️',color:'#f97316',placeholder:'مثال: ما مخاطر إطلاق مشروع جديد؟'},
+ plan:{label:'وضع خطة',icon:'📅',color:'#818cf8',placeholder:'مثال: أريد تعلم البرمجة خلال 6 أشهر'}
+};
+
+var DIMENSIONS = [
+{id:'depth',icon:'🧠',name:'العمق',value:60,desc:'سطحي ← عميق'},
+{id:'critical',icon:'🔍',name:'النقد',value:55,desc:'متسامح ← ناقد'},
+{id:'creative',icon:'💡',name:'الإبداع',value:55,desc:'تقليدي ← جريء'},
+{id:'evidence',icon:'📚',name:'الأدلة',value:65,desc:'حدس ← أدلة'},
+{id:'practical',icon:'🛠️',name:'العملية',value:65,desc:'نظري ← تنفيذي'},
+{id:'ethics',icon:'⚖️',name:'الأخلاق',value:45,desc:'نتائج ← قيم'},
+{id:'future',icon:'🚀',name:'المستقبل',value:45,desc:'الآن ← بعيد'},
+{id:'detail',icon:'🔬',name:'التفصيل',value:50,desc:'مختصر ← مفصل'}
+];
+var LENSES = [
+{id:'balanced',name:'⚖️ متوازن',text:'وازن بين الأدلة، النقد، الإبداع، والعملية.'},
+{id:'deep',name:'🧠 عميق',text:'ابحث عن الجذور والافتراضات والآثار بعيدة المدى.'},
+{id:'practical',name:'🛠️ عملي',text:'فضّل الحلول القابلة للتنفيذ والخطوات الواضحة.'},
+{id:'contrarian',name:'🧨 معاكس',text:'تحدى الافتراض السائد وابحث عن تفسير بديل.'}
+];
+var selectedLens = 'balanced';
+
+/* ===== دوال التبديل ===== */
+function switchAppMode(mode) {
+    currentAppMode = mode;
+    var tabDisc = document.getElementById('tabDiscussion');
+    var tabTask = document.getElementById('tabTask');
+    var discControls = document.getElementById('discussionControls');
+    var taskPanel = document.getElementById('taskControlPanel');
+    var topicInp = document.getElementById('topicInput');
+
+    if (mode === 'task') {
+        tabDisc.classList.remove('active');
+        tabTask.classList.add('active');
+        discControls.style.display = 'none';
+        taskPanel.classList.add('show');
+        topicInp.placeholder = 'أدخل مهمة كبيرة ليقوم المذيع بتخطيطها وتنفيذها...';
+        sysMsg('⚡ تم التبديل إلى وضع تنفيذ المهام (المذيع هو المدير التنفيذي)');
+    } else {
+        tabTask.classList.remove('active');
+        tabDisc.classList.add('active');
+        discControls.style.display = 'flex';
+        taskPanel.classList.remove('show');
+        topicInp.placeholder = MODE_INFO[debateMode] ? MODE_INFO[debateMode].placeholder : 'أدخل الموضوع...';
+        sysMsg('🎭 تم التبديل إلى وضع النقاش');
+    }
+}
+
+function handleMainAction() {
+    if (currentAppMode === 'task') {
+        startTaskExecution();
+    } else {
+        startDebate();
+    }
+}
+
+/* =========================================================
+   ===== نظام تنفيذ المهام بقيادة المذيع =====
+   ========================================================= */
+
+function getTaskSystemPrompt(role, context) {
+    var botsInfo = activeBots().map(function(b){ return b.id + ': ' + b.name + ' (' + b.emoji + ')' }).join('\n');
+    
+    if (role === 'planner') {
+        return 'أنت المذيع، مدير تنفيذ المهام. مهمتك:\n1. استقبال الهدف الكبير من المستخدم\n2. تقسيمه إلى مهام فرعية منطقية ومتسلسلة\n3. توزيع كل مهمة فرعية على البوت المناسب\n4. متابعة التنفيذ ومراجعة النتائج\n5. دمج المخرجات وتقديم النتيجة النهائية\n\nالبوتات المتاحة:\n' + botsInfo + '\n\nأعد الإجابة بصيغة JSON فقط:\n{\n  "title": "عنوان المهمة",\n  "subtasks": [\n    { "id": 1, "title": "وصف المهمة", "assignedAgent": "scientist", "instruction": "تعليمات محددة للمنفذ" }\n  ]\n}';
+    } else if (role === 'executor') {
+        return 'أنت منفذ مهام. نفذ المهمة الموكلة بدقة حسب التعليمات. استخدم الأدوات المتاحة عند الحاجة. قدّم نتيجة واضحة ومباشرة.';
+    } else if (role === 'reviewer') {
+        return 'أنت مراجع مهام. قيّم نتيجة المهمة. أجب بـ ACCEPTED إذا كانت مقبولة، أو REJECTED مع سبب واضح.';
+    } else if (role === 'integrator') {
+        return 'أنت المذيع، مدير المهام. اجمع نتائج المهام الفرعية وقدّم تقريراً نهائياً متكاملاً للمستخدم. كن منظماً وواضحاً.';
+    }
+    return '';
+}
+
+function callTaskAPI(agent, messages, role, toolsEnabled) {
+    taskAbortController = new AbortController();
+    var sysPrompt = getTaskSystemPrompt(role, agent);
+    var msgs = [{ role: 'system', content: sysPrompt }];
+    for (var i = 0; i < messages.length; i++) msgs.push(messages[i]);
+
+    var tools = (toolsEnabled !== false) ? getEnabledToolsForAPI() : [];
+    var body = {
+        model: agent.model,
+        messages: msgs,
+        temperature: 0.5,
+        max_tokens: 800
+    };
+    if (tools.length > 0) { body.tools = tools; body.tool_choice = 'auto'; }
+
+    return fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        body: JSON.stringify(body),
+        signal: taskAbortController.signal
+    })
+    .then(function(res) {
+        if (!res.ok) return res.json().catch(function(){ return {} }).then(function(d) {
+            throw new Error(d.error?.message || d.detail || 'HTTP ' + res.status);
+        });
+        return res.json();
+    })
+    .then(function(data) {
+        rRecord(agent.model);
+        updateRateBars();
+        if (!data.choices || !data.choices[0]) throw new Error('استجابة غير متوقعة');
+        return data.choices[0];
+    })
+    .catch(function(err) {
+        if (err.name === 'AbortError') return null;
+        throw err;
+    });
+}
+
+function updateTaskUI() {
+    var container = document.getElementById('subtasksContainer');
+    var progressFill = document.getElementById('taskProgressBar');
+    var statusLabel = document.getElementById('taskOverallStatus');
+
+    if (!currentTaskData || !currentTaskData.subtasks || currentTaskData.subtasks.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#6b7280; font-size:11px; padding:10px;">أدخل مهمة ليقوم المذيع بتخطيطها وتنفيذها</div>';
+        if (progressFill) progressFill.style.width = '0%';
+        if (statusLabel) statusLabel.textContent = 'جاهز';
+        return;
+    }
+
+    var total = currentTaskData.subtasks.length;
+    var completed = currentTaskData.subtasks.filter(function(s) { return s.status === 'completed'; }).length;
+    var percent = Math.round((completed / total) * 100);
+    if (progressFill) progressFill.style.width = percent + '%';
+    if (statusLabel) statusLabel.textContent = percent + '% مكتمل';
+
+    var html = '';
+    currentTaskData.subtasks.forEach(function(sub) {
+        var statusClass = 'status-' + sub.status;
+        var statusLabelText = sub.status === 'pending' ? '⏳ انتظار' :
+            sub.status === 'running' ? '⚡ جارٍ...' :
+            sub.status === 'review' ? '🔍 مراجعة' :
+            sub.status === 'completed' ? '✅ مكتملة' :
+            sub.status === 'failed' ? '❌ رفضت' : '⏳ ' + sub.status;
+
+        var agent = findBot(sub.assignedAgent) || { name: sub.assignedAgent || 'غير محدد', color: '#a5b4fc' };
+        html += `
+            <div class="subtask-item">
+                <div class="subtask-header">
+                    <span style="font-weight:700; color:#e5e7eb;">#${sub.id} ${escH(sub.title)}</span>
+                    <span class="subtask-status ${statusClass}">${statusLabelText}</span>
+                </div>
+                <div style="font-size:9px; color:#8b93a7;">المنفذ: <b style="color:${agent.color}">${agent.name}</b></div>
+                ${sub.result ? '<div style="font-size:10px; color:#8b93a7; margin-top:3px; border-top:1px solid rgba(255,255,255,0.05); padding-top:3px;">📌 ' + escH(sub.result.substring(0, 120)) + (sub.result.length > 120 ? '...' : '') + '</div>' : ''}
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function updateTaskSubtask(id, status, result) {
+    if (!currentTaskData) return;
+    var sub = currentTaskData.subtasks.find(function(s) { return s.id === id; });
+    if (sub) {
+        sub.status = status;
+        if (result) sub.result = result;
+        updateTaskUI();
+    }
+}
+
+// ===== المحرك الرئيسي لتنفيذ المهام (المذيع هو المدير) =====
+async function executeTaskWithAnchor(goal) {
+    taskRunning = true;
+    taskPaused = false;
+    setStatus('active');
+    sysMsg('🎙️ [المذيع] بدء تنفيذ المهمة: "' + goal + '"');
+
+    var anchor = findBot('anchor');
+    var scientist = findBot('scientist');
+    var skeptic = findBot('skeptic');
+    var philosopher = findBot('philosopher');
+
+    try {
+        // ===== 1. المذيع يخطط =====
+        sysMsg('📋 [المذيع] جاري تحليل الهدف وتقسيم المهام...');
+        setStatus('typing', anchor.id);
+        showTyping(anchor);
+
+        var planMsg = [{ role: 'user', content: 'الهدف: ' + goal + '\nقم بتقسيم هذه المهمة إلى خطوات فرعية.' }];
+        var planChoice = await callTaskAPI(anchor, planMsg, 'planner');
+        hideTyping();
+
+        if (!planChoice || !taskRunning) { stopTaskExecution(); return; }
+
+        var planContent = planChoice.message.content || '';
+        var jsonMatch = planContent.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('لم يستطع المذيع تقسيم المهمة');
+        var taskData = JSON.parse(jsonMatch[0]);
+        taskData.goal = goal;
+        taskData.subtasks = taskData.subtasks.map(function(s, idx) {
+            s.id = idx + 1;
+            s.status = 'pending';
+            s.assignedAgent = s.assignedAgent || 'scientist';
+            return s;
+        });
+
+        currentTaskData = taskData;
+        updateTaskUI();
+        sysMsg('✅ [المذيع] تم تقسيم المهمة إلى ' + taskData.subtasks.length + ' مهام فرعية.');
+
+        // ===== 2. المذيع يدير التنفيذ =====
+        var accumResults = [];
+        for (var i = 0; i < taskData.subtasks.length; i++) {
+            if (!taskRunning || taskPaused) {
+                while (taskPaused) { await sleep(500); }
+                if (!taskRunning) break;
+            }
+
+            var sub = taskData.subtasks[i];
+            updateTaskSubtask(sub.id, 'running');
+
+            var executor = findBot(sub.assignedAgent) || scientist;
+            sysMsg('⚙️ [المذيع] يكلف ' + executor.name + ' بتنفيذ: ' + sub.title);
+            setStatus('typing', executor.id);
+            showTyping(executor);
+
+            var execPrompt = 'المهمة: "' + sub.title + '"\n' + (sub.instruction || 'نفذ هذه المهمة بدقة.') + '\nالسياق السابق:\n' + JSON.stringify(accumResults, null, 2);
+            var execMsg = [{ role: 'user', content: execPrompt }];
+            var execChoice = await callTaskAPI(executor, execMsg, 'executor');
+            hideTyping();
+
+            if (!execChoice || !taskRunning) { stopTaskExecution(); return; }
+
+            var rawResult = execChoice.message.content || 'تم التنفيذ.';
+
+            // معالجة استدعاء الأدوات
+            if (execChoice.message.tool_calls && execChoice.message.tool_calls.length > 0) {
+                setStatus('tool');
+                addToolMessage('جاري تنفيذ ' + execChoice.message.tool_calls.length + ' أداة...', '');
+                var toolPromises = execChoice.message.tool_calls.map(function(tc) {
+                    var args = {};
+                    try { args = JSON.parse(tc.function.arguments || '{}'); } catch (e) {}
+                    return callMCPTool(tc.function.name, args)
+                        .then(function(result) {
+                            var rs = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+                            addToolMessage(tc.function.name, rs, false);
+                            return { tool_call_id: tc.id, role: 'tool', content: JSON.stringify(result) };
+                        })
+                        .catch(function(error) {
+                            addToolMessage(tc.function.name, error.message, true);
+                            return { tool_call_id: tc.id, role: 'tool', content: JSON.stringify({ error: error.message }) };
+                        });
+                });
+                var toolResults = await Promise.all(toolPromises);
+                var toolMsgs = [{ role: 'user', content: execPrompt }];
+                toolMsgs.push({ role: 'assistant', content: rawResult, tool_calls: execChoice.message.tool_calls });
+                toolResults.forEach(function(tr) { toolMsgs.push(tr); });
+
+                var secondChoice = await callTaskAPI(executor, toolMsgs, 'executor');
+                if (secondChoice) rawResult = secondChoice.message.content || rawResult;
+            }
+
+            addMsg(rawResult, executor.id, 'bot');
+
+            // ===== 3. المذيع يراجع النتيجة =====
+            updateTaskSubtask(sub.id, 'review');
+            sysMsg('🔍 [المذيع] يراجع نتيجة المهمة #' + sub.id + '...');
+            setStatus('typing', anchor.id);
+            showTyping(anchor);
+
+            var reviewMsg = [{ role: 'user', content: 'المهمة: "' + sub.title + '"\nالنتيجة:\n' + rawResult + '\nهل النتيجة مقبولة؟ أجب بـ ACCEPTED أو REJECTED مع سبب مختصر.' }];
+            var reviewChoice = await callTaskAPI(anchor, reviewMsg, 'reviewer');
+            hideTyping();
+
+            if (!reviewChoice || !taskRunning) { stopTaskExecution(); return; }
+
+            var reviewText = reviewChoice.message.content || '';
+            if (reviewText.includes('REJECTED')) {
+                updateTaskSubtask(sub.id, 'failed');
+                sysMsg('⚠️ [المذيع] رفض نتيجة المهمة: ' + sub.title + ' - ' + reviewText);
+            } else {
+                updateTaskSubtask(sub.id, 'completed', rawResult);
+                accumResults.push({ id: sub.id, title: sub.title, result: rawResult });
+                sysMsg('✅ [المذيع] قبل نتيجة المهمة: ' + sub.title);
+            }
+
+            await sleep(500);
+        }
+
+        // ===== 4. المذيع يدمج المخرجات =====
+        if (taskRunning && accumResults.length > 0) {
+            sysMsg('🧩 [المذيع] يقوم بدمج المخرجات في تقرير نهائي...');
+            setStatus('typing', anchor.id);
+            showTyping(anchor);
+
+            var finalPrompt = 'الهدف الأصلي: "' + goal + '"\n\nنتائج المهام الفرعية:\n' + JSON.stringify(accumResults, null, 2) + '\n\nقم بتقديم المخرج النهائي المتكامل للمستخدم.';
+            var finalChoice = await callTaskAPI(anchor, [{ role: 'user', content: finalPrompt }], 'integrator');
+            hideTyping();
+
+            if (finalChoice && taskRunning) {
+                var finalOutput = finalChoice.message.content || 'تم الدمج بنجاح.';
+                addMsg('🎯 **المخرج النهائي للمهمة:**\n\n' + finalOutput, anchor.id, 'summary');
+                sysMsg('🎉 [المذيع] اكتمل تنفيذ المهمة بنجاح!');
+            }
+        }
+
+        setStatus('stopped');
+        taskRunning = false;
+        document.getElementById('pauseBtn').disabled = true;
+        document.getElementById('resumeBtn').disabled = true;
+
+    } catch (err) {
+        hideTyping();
+        sysMsg('❌ [المذيع] خطأ في تنفيذ المهمة: ' + err.message);
+        setStatus('stopped');
+        taskRunning = false;
+        document.getElementById('pauseBtn').disabled = true;
+        document.getElementById('resumeBtn').disabled = true;
+    }
+}
+
+function startTaskExecution() {
+    topic = document.getElementById('topicInput').value.trim();
+    if (!apiKey) { openSettings(); showKeyMsg('❌ أدخل مفتاح API أولاً', '#ef4444'); return; }
+    if (!topic) {
+        var inp = document.getElementById('topicInput');
+        inp.style.borderColor = '#ef4444';
+        setTimeout(function() { inp.style.borderColor = 'rgba(255,255,255,.1)'; }, 2000);
+        return;
+    }
+
+    currentTaskData = null;
+    updateTaskUI();
+    document.getElementById('pauseBtn').disabled = false;
+    document.getElementById('resumeBtn').disabled = true;
+
+    executeTaskWithAnchor(topic);
+}
+
+function pauseTaskExecution() {
+    if (!taskRunning) return;
+    taskPaused = true;
+    if (taskAbortController) try { taskAbortController.abort(); } catch (e) {}
+    setStatus('paused');
+    sysMsg('⏸ [المذيع] تم إيقاف تنفيذ المهمة مؤقتاً');
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('resumeBtn').disabled = false;
+}
+
+function resumeTaskExecution() {
+    if (!taskRunning || !taskPaused) return;
+    taskPaused = false;
+    setStatus('active');
+    sysMsg('▶ [المذيع] تم استئناف تنفيذ المهمة');
+    document.getElementById('pauseBtn').disabled = false;
+    document.getElementById('resumeBtn').disabled = true;
+}
+
+function stopTaskExecution() {
+    taskRunning = false;
+    taskPaused = false;
+    if (taskAbortController) try { taskAbortController.abort(); } catch (e) {}
+    if (debateTimer) clearTimeout(debateTimer);
+    hideTyping();
+    setStatus('stopped');
+    document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('resumeBtn').disabled = true;
+    sysMsg('⏹ [المذيع] تم إيقاف تنفيذ المهمة');
+}
+
+/* ===== دوال النقاش (الأصلية) ===== */
+function renderBots(){
+ var row=document.getElementById('botsRow'), h='';
+ BOTS.forEach(function(b){
+   h+='<div class="bot-chip '+(b.on?'on':'')+'" id="chip-'+b.id+'" onclick="toggleBot(\''+b.id+'\')" style="color:'+b.color+';border-color:'+(b.on?b.color:'transparent')+'"><span class="chip-emoji">'+b.emoji+'</span><span class="chip-name">'+b.name+'</span><span class="chip-check" id="chk-'+b.id+'">'+(b.on?'✓':'')+'</span></div>';
+ });
+ row.innerHTML=h;
+}
+function renderDimensions(){
+ var row=document.getElementById('dimensionsRow'), h='';
+ DIMENSIONS.forEach(function(d){
+   h+='<div class="dimension-card"><div class="dim-head"><span><span class="dim-icon">'+d.icon+'</span> '+d.name+'</span><span class="dim-val" id="dimv-'+d.id+'">'+d.value+'</span></div><input class="range" type="range" min="0" max="100" value="'+d.value+'" oninput="setDimension(\''+d.id+'\',this.value)"><div style="font-size:8px;color:#5f6676;margin-top:1px">'+d.desc+'</div></div>';
+ });
+ row.innerHTML=h;
+}
+function renderLenses(){
+ var row=document.getElementById('lensesRow'), h='';
+ LENSES.forEach(function(l){ h+='<button class="chip '+(l.id===selectedLens?'active':'')+'" onclick="selectLens(\''+l.id+'\')">'+l.name+'</button>' });
+ row.innerHTML=h;
+}
+function renderModes(){
+ var rail=document.getElementById('modeRail'), sel=document.getElementById('modeSelect'); if(!rail||!sel) return;
+ var h='', o=''; Object.keys(MODE_INFO).forEach(function(id){ var m=MODE_INFO[id]; h+='<button class="mode-chip '+(id===debateMode?'active':'')+'" style="--mc:'+m.color+'" onclick="onModeChange(\''+id+'\')">'+m.icon+' '+m.label+'</button>'; o+='<option value="'+id+'">'+m.icon+' '+m.label+'</option>' });
+ rail.innerHTML=h; sel.innerHTML=o; sel.value=debateMode;
+}
+function renderRounds(){
+ var row=document.getElementById('roundsRow'); if(!row) return; var h='';
+ for(var i=1;i<=12;i++) h+='<button class="round-chip '+(!roundInfinite&&totalRounds===i?'active':'')+'" onclick="setRounds('+i+')">'+i+' جولات<small>محددة</small></button>';
+ h+='<button class="round-chip '+(roundInfinite?'active':'')+'" onclick="setRounds(0)">∞ مستمر<small>بدون نهاية</small></button>';
+ row.innerHTML=h; updateRoundUI();
+}
+function setRounds(n){ roundInfinite=n===0; totalRounds=n||0; renderRounds(); }
+function updateRoundUI(){
+ var p=document.getElementById('roundProgress'), meta=document.getElementById('roundMeta'), modeMeta=document.getElementById('modeMeta'), lensMeta=document.getElementById('lensMeta'), dimMeta=document.getElementById('dimensionMeta');
+ if(p) p.style.width = roundInfinite ? '100%' : Math.min(100, roundNumber/(totalRounds||1)*100)+'%';
+ if(meta) meta.textContent = roundNumber ? ('الجولة '+roundNumber+(roundInfinite?' / ∞':' / '+totalRounds)) : 'لم تبدأ';
+ var m=MODE_INFO[debateMode]; if(modeMeta) modeMeta.textContent = (m ? m.icon+' '+m.label : '🎭 نقاش حر');
+ var l=LENSES.find(function(x){ return x.id===selectedLens }); if(lensMeta) lensMeta.textContent = '🔭 '+(l?l.name:'متوازن');
+ var vals=DIMENSIONS.map(function(x){ return x.value }); var avg=Math.round(vals.reduce(function(a,b){ return a+b },0)/vals.length); if(dimMeta) dimMeta.textContent = '🧠 عمق '+avg+'%';
+}
+function setDimension(id,val){ var d=DIMENSIONS.find(function(x){ return x.id===id }); if(d) d.value=parseInt(val); var el=document.getElementById('dimv-'+id); if(el) el.textContent=val; updateRoundUI(); }
+function selectLens(id){ selectedLens=id; renderLenses(); updateRoundUI(); }
+function dimensionsPrompt(){
+ var s='أبعاد التفكير المختارة:\n';
+ DIMENSIONS.forEach(function(d){ s+='- '+d.name+': '+d.value+'/100 — '+d.desc+'\n' });
+ var l=LENSES.find(function(x){ return x.id===selectedLens });
+ s+='عدسة النقاش: '+(l?l.name:'متوازن')+' — '+(l?l.text:'')+'\n';
+ return s;
+}
+function onModeChange(v){ debateMode=v; selectedMode=v; var i=MODE_INFO[v]; if(i && currentAppMode === 'discussion') document.getElementById('topicInput').placeholder=i.placeholder; renderModes(); updateRoundUI(); }
+function toggleBot(id){
+ var b=findBot(id); if(!b) return; b.on=!b.on;
+ var active=activeBots().length;
+ if(running && active<2 && !b.isSummarizer){ b.on=true; sysMsg('⚠️ يجب أن يبقى بوتان على الأقل أثناء النقاش!') }
+ renderBots(); updateRateBars();
+}
+
+/* ===== دوال الصوت ===== */
+function cleanForSpeech(txt){
+ if(!txt) return '';
+ var s=String(txt);
+ s=s.replace(/```[\s\S]*?```/g,' ');
+ s=s.replace(/https?:\/\/\S+/gi,' ');
+ s=s.replace(/www\.\S+/gi,' ');
+ s=s.replace(/\|/g,' ');
+ s=s.replace(/[#*_`~^]/g,' ');
+ s=s.replace(/[{}\[\]<>]/g,' ');
+ s=s.replace(/\$/g,' ');
+ s=s.replace(/\s{2,}/g,' ').trim();
+ return s;
+}
+function getArVoice(){ try{ var v=speechSynthesis.getVoices(); for(var i=0;i<v.length;i++) if(v[i].lang && v[i].lang.indexOf('ar')===0) return v[i] } catch(e){} return null }
+try{ speechSynthesis.onvoiceschanged=function(){ speechSynthesis.getVoices() } } catch(e){}
+function speakText(txt,bot,mid){ return new Promise(function(resolve){ if(!globalSpk){ resolve(); return } txt=cleanForSpeech(txt); if(!txt){ resolve(); return } try{ speechSynthesis.cancel() } catch(e){} var u=new SpeechSynthesisUtterance(txt); u.lang='ar-SA'; u.pitch=bot.voice.pitch; u.rate=bot.voice.rate*speechSpd; var v=getArVoice(); if(v) u.voice=v; speaking=true; speakMsgId=mid; showWave(true); hlMsg(mid,true); u.onend=function(){ speaking=false; speakMsgId=null; showWave(false); hlMsg(mid,false); resolve() }; u.onerror=function(){ speaking=false; speakMsgId=null; showWave(false); hlMsg(mid,false); resolve() }; speechSynthesis.speak(u) }) }
+function speakOnce(txt,bot,mid){ txt=cleanForSpeech(txt); if(!txt) return; try{ speechSynthesis.cancel() } catch(e){} var u=new SpeechSynthesisUtterance(txt); u.lang='ar-SA'; u.pitch=bot.voice.pitch; u.rate=bot.voice.rate*speechSpd; var v=getArVoice(); if(v) u.voice=v; speaking=true; speakMsgId=mid; showWave(true); hlMsg(mid,true); u.onend=function(){ speaking=false; showWave(false); hlMsg(mid,false) }; u.onerror=function(){ speaking=false; showWave(false); hlMsg(mid,false) }; speechSynthesis.speak(u) }
+function stopSpk(){ try{ speechSynthesis.cancel() } catch(e){} speaking=false; showWave(false); if(speakMsgId) hlMsg(speakMsgId,false); speakMsgId=null }
+function showWave(on){ var w=document.getElementById('waveEl'); if(w) w.classList.toggle('show',on) }
+function hlMsg(id,on){ var e=document.getElementById(id); if(e) e.style.boxShadow=on?'0 0 15px rgba(52,211,153,.2)':'' }
+
+/* ===== دوال الرسائل ===== */
+function sysMsg(txt){ var a=document.getElementById('chatArea'), w=document.getElementById('welcomeMsg'); if(w) w.remove(); var d=document.createElement('div'); d.className='msg-sys'; d.innerHTML='<span>'+escH(txt)+'</span>'; a.appendChild(d); a.scrollTop=a.scrollHeight }
+function addMsg(txt,botId,type){
+ var a=document.getElementById('chatArea'), w=document.getElementById('welcomeMsg'); if(w) w.remove(); var id='m'+(++msgN), d=document.createElement('div'); d.id=id;
+ if(type==='system'){ d.className='msg-sys'; d.innerHTML='<span>'+escH(txt)+'</span>'; a.appendChild(d); a.scrollTop=a.scrollHeight; return id }
+ if(type==='tool'){ d.className='msg msg-tool'; d.innerHTML='<div class="tool-label">🔧 '+escH(botId||'أداة')+'</div><div class="tool-result">'+escH(txt)+'</div>'; a.appendChild(d); a.scrollTop=a.scrollHeight; return id }
+ var isU=type==='user', isSummary=type==='summary', bot=isU?null:findBot(botId), nm=isU?'أنت':bot?bot.name:'', em=isU?'👤':bot?bot.emoji:'', bc=isU?'#94a3b8':bot?bot.color:'#888', bg=isU?'rgba(148,163,184,.08)':bot?bot.bg:'rgba(128,128,128,.08)';
+ d.className=isSummary?'msg msg-summary':'msg'; d.style.background=bg; if(!isSummary) d.style.borderRightColor=bc;
+ var spk=!isU&&bot?'<button class="msg-speak-btn" onclick="playMsg(\''+id+'\',\''+botId+'\')">🔊</button>':'';
+ var t=new Date(), ts=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+ d.innerHTML='<div class="msg-header"><div class="msg-avatar" style="background:'+bg+';border-color:'+bc+'">'+em+'</div><span class="msg-name" style="color:'+bc+'">'+nm+'</span><span class="msg-time">'+ts+'</span>'+spk+'</div><div class="msg-text" dir="rtl">'+escH(txt)+'</div>';
+ a.appendChild(d); a.scrollTop=a.scrollHeight;
+ if(type!=='system'){ var pfx=isU?'[المستخدم]':'['+nm+']'; hist.push({role:isU?'user':'assistant',content:pfx+': '+txt,botId:botId||'user',text:txt,name:nm}); if(hist.length>MAX_HIST) hist=hist.slice(-MAX_HIST); if(!isU&&!isSummary) msgsSinceSummary++ }
+ return id
+}
+function addToolMessage(toolName, result, isError) {
+ var a=document.getElementById('chatArea'), w=document.getElementById('welcomeMsg'); if(w) w.remove();
+ var id='tool-'+(++msgN), d=document.createElement('div'); d.id=id; d.className='msg msg-tool';
+ var label = isError ? '❌ فشل ' + toolName : '🔧 نتيجة ' + toolName;
+ var cls = isError ? 'tool-error' : 'tool-result';
+ d.innerHTML='<div class="tool-label">'+label+'</div><div class="'+cls+'">'+escH(result)+'</div>';
+ a.appendChild(d); a.scrollTop=a.scrollHeight; return id;
+}
+function playMsg(mid,bid){ var e=document.getElementById(mid); if(!e) return; var p=e.querySelector('.msg-text'), b=findBot(bid); if(!p||!b) return; if(speaking&&speakMsgId===mid){ stopSpk(); return } speakOnce(p.textContent,b,mid) }
+function showTyping(bot){ var b=document.getElementById('typingBar'); document.getElementById('tEmoji').textContent=bot.emoji; document.getElementById('tName').textContent=bot.name; document.getElementById('tName').style.color=bot.color; b.classList.add('show') }
+function hideTyping(){ document.getElementById('typingBar').classList.remove('show') }
+function setStatus(s,bid){ var dot=document.getElementById('sDot'), txt=document.getElementById('sText'), bot=bid?findBot(bid):null, p=document.getElementById('pauseBtn'), r=document.getElementById('resumeBtn');
+ if(s==='active'){ dot.style.background='#22c55e'; dot.className='status-dot pulsing'; txt.style.color='#86efac'; txt.textContent='🟢 جارٍ العمل...'; p.disabled=false; r.disabled=true }
+ else if(s==='paused'){ dot.style.background='#eab308'; dot.className='status-dot'; txt.style.color='#fde047'; txt.textContent='⏸ متوقف'; p.disabled=true; r.disabled=false }
+ else if(s==='stopped'){ dot.style.background='#6b7280'; dot.className='status-dot'; txt.style.color='#9ca3af'; txt.textContent='في انتظار البدء...'; p.disabled=true; r.disabled=true }
+ else if(s==='typing'&&bot){ dot.style.background=bot.color; dot.className='status-dot pulsing'; txt.style.color=bot.color; txt.textContent=bot.emoji+' '+bot.name+' يعمل...' }
+ else if(s==='tool'){ dot.style.background='#22d3ee'; dot.className='status-dot pulsing'; txt.style.color='#67e8f9'; txt.textContent='🔧 يستخدم أداة...' }
+ else if(s==='rateWait'){ dot.style.background='#f97316'; dot.className='status-dot'; txt.style.color='#fdba74'; txt.textContent='⏳ انتظار...' }
+ else if(s==='interrupt'){ dot.style.background='#94a3b8'; dot.className='status-dot pulsing'; txt.style.color='#cbd5e1'; txt.textContent='✋ تدخل...' }
+ else if(s==='summary'){ dot.style.background='#fbbf24'; dot.className='status-dot'; txt.style.color='#fbbf24'; txt.textContent='📋 تلخيص...' }
+ else if(s==='waiting'){ dot.style.background='#60a5fa'; dot.className='status-dot pulsing'; txt.style.color='#93c5fd'; txt.textContent='⏳ انتظار...' }
+}
+
+/* ===== دوال API ===== */
+function getBotPrompt(bot){
+ var base=bot.prompts[debateMode]||bot.prompts.debate; var modeExtra=(MODE_INFO[debateMode]?MODE_INFO[debateMode].label:'نقاش'); base+='\nأنت تعمل في نمط: '+modeExtra+'. عدّل إجابتك لتخدم هذا النمط بوضوح.';
+ return base+'\n\n'+dimensionsPrompt()+'\n\nيمكنك استخدام الأدوات المتاحة عند الحاجة.';
+}
+
+function getEnabledToolsForAPI() {
+    return mcpTools
+        .filter(function(t) { return enabledMCPTools.includes(t.name); })
+        .map(function(t) {
+            return {
+                type: 'function',
+                function: {
+                    name: t.name,
+                    description: t.description || 'أداة ' + t.name,
+                    parameters: t.parameters || { type: 'object', properties: {} }
+                }
+            };
+        });
+}
+
+function callAPIWithTools(bot, msgs) {
+    abortC = new AbortController();
+    var sysPrompt = getBotPrompt(bot);
+    var messages = [];
+    messages.push({role: 'system', content: sysPrompt});
+    for(var i=0; i<msgs.length; i++) messages.push(msgs[i]);
+    
+    var tools = getEnabledToolsForAPI();
+    var body = {
+        model: bot.model,
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 500
+    };
+    if (tools.length > 0) { body.tools = tools; body.tool_choice = 'auto'; }
+    
+    return fetch(API_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer '+apiKey},
+        body: JSON.stringify(body),
+        signal: abortC.signal
+    })
+    .then(function(res) {
+        if(!res.ok) return res.json().catch(function(){ return {} }).then(function(d) {
+            var em = d.error && d.error.message ? d.error.message : (d.detail || 'HTTP '+res.status);
+            throw new Error(em);
+        });
+        return res.json();
+    })
+    .then(function(data) {
+        rRecord(bot.model);
+        updateRateBars();
+        if(!data.choices || !data.choices[0]) throw new Error('استجابة غير متوقعة');
+        return data.choices[0];
+    })
+    .catch(function(err) {
+        if(err.name === 'AbortError') return null;
+        throw err;
+    });
+}
+
+function buildMsgs(bot, isInterrupt, interruptMsg) {
+    var mi=MODE_INFO[debateMode], ctx='نوع الجلسة: '+(mi?mi.label:'نقاش')+'\nالجولة الحالية: '+roundNumber+(roundInfinite?'':' من '+totalRounds)+'\nالموضوع: "'+topic+'"\n'+dimensionsPrompt()+'\nشارك برأيك.';
+    if(isInterrupt&&interruptMsg) ctx+='\n\nالمستخدم: "'+interruptMsg+'" — ردّ مباشرة.';
+    var msgs=[{role:'user',content:ctx}];
+    for(var i=0;i<hist.length;i++){ var m=hist[i]; if(m.botId===bot.id) msgs.push({role:'assistant',content:m.content}); else msgs.push({role:'user',content:m.content}) }
+    if(!hist.length) msgs.push({role:'user',content:'ابدأ برأيك حول: "'+topic+'".'});
+    return msgs;
+}
+
+function getWait(){ var v=parseInt(document.getElementById('timerSelect').value)||0; if(!v){ if(spdMode==='eco') return 6000+Math.random()*3000; if(spdMode==='turbo') return 1500+Math.random()*1500; return 3000+Math.random()*2000 } return v*1000*(1+(Math.random()-.5)*.1) }
+function cleanResp(txt){ return txt.replace(/^\[(المذيع|العالِم|الفيلسوف|المشكّك|الملخّص|المستشار|المحلل|المستخدم)\]:\s*/g,'') }
+
+/* ===== استدعاء أدوات MCP ===== */
+async function callMCPTool(toolName, params) {
+    var mcpUrl = document.getElementById('mcpUrl')?.value || MCP_URL;
+    var styles = [
+        { tool: toolName, arguments: params },
+        { name: toolName, arguments: params },
+        { tool_name: toolName, arguments: params },
+        { tool: toolName, args: params },
+        { name: toolName, args: params }
+    ];
+    var endpoints = ['/call', '/execute', '/run', '/tools/call', '/invoke', '/api/run'];
+    var lastError = null;
+    
+    for (var ei = 0; ei < endpoints.length; ei++) {
+        for (var si = 0; si < styles.length; si++) {
+            try {
+                var response = await fetch(mcpUrl + endpoints[ei], {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(styles[si]),
+                    signal: AbortSignal.timeout(30000)
+                });
+                if (response.status === 404 || response.status === 405) continue;
+                if (!response.ok) {
+                    var text = await response.text();
+                    throw new Error('HTTP ' + response.status + ': ' + text.slice(0, 100));
+                }
+                var data = await response.json();
+                return data;
+            } catch (error) {
+                if (error.name === 'AbortError') throw new Error('انتهى وقت الاستدعاء');
+                lastError = error;
+            }
+        }
+    }
+    
+    try {
+        var rpcResponse = await fetch(mcpUrl + '/mcp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: Date.now(),
+                method: 'tools/call',
+                params: { name: toolName, arguments: params }
+            }),
+            signal: AbortSignal.timeout(30000)
+        });
+        if (rpcResponse.ok) {
+            var rpcData = await rpcResponse.json();
+            if (rpcData.error) throw new Error(rpcData.error.message || 'خطأ في MCP');
+            return rpcData.result || rpcData;
+        }
+    } catch (error) {
+        lastError = error;
+    }
+    
+    throw new Error(lastError?.message || 'تعذر استدعاء الأداة');
+}
+
+/* ===== دوال النقاش ===== */
+function debateStep() {
+    if(!running||paused||currentAppMode !== 'discussion') return;
+    var bots = activeBots();
+    if(bots.length < 2) { sysMsg('⚠️ يجب تفعيل بوتين على الأقل!'); setStatus('stopped'); return; }
+    
+    var s = getSummarizer();
+    if(s && msgsSinceSummary >= s.summaryEvery && hist.length) {
+        msgsSinceSummary = 0;
+        doSummary(s, false, function() { if(running && !paused) debateTimer = setTimeout(debateStep, getWait()); });
+        return;
+    }
+    
+    var bot = bots[turn % bots.length];
+    if(!rCan(bot.model)) { setStatus('rateWait'); debateTimer = setTimeout(debateStep, 5000 + rDelay(bot.model)); return; }
+    
+    var extra = rDelay(bot.model);
+    var go = function() {
+        if(!running || paused) return;
+        setStatus('typing', bot.id);
+        showTyping(bot);
+        
+        callAPIWithTools(bot, buildMsgs(bot))
+        .then(function(choice) {
+            hideTyping();
+            if(!choice || !running || paused) return;
+            
+            var msg = choice.message;
+            if(msg.tool_calls && msg.tool_calls.length > 0) {
+                setStatus('tool');
+                addToolMessage('جاري تنفيذ ' + msg.tool_calls.length + ' أداة...', '');
+                
+                var toolPromises = msg.tool_calls.map(function(tc) {
+                    var toolName = tc.function.name;
+                    var args = {};
+                    try { args = JSON.parse(tc.function.arguments || '{}'); } catch(e) { args = {}; }
+                    return callMCPTool(toolName, args)
+                        .then(function(result) {
+                            var resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+                            addToolMessage(toolName, resultStr, false);
+                            return { tool_call_id: tc.id, role: 'tool', content: JSON.stringify(result) };
+                        })
+                        .catch(function(error) {
+                            addToolMessage(toolName, error.message, true);
+                            return { tool_call_id: tc.id, role: 'tool', content: JSON.stringify({ error: error.message }) };
+                        });
+                });
+                
+                Promise.all(toolPromises).then(function(toolResults) {
+                    var newMsgs = buildMsgs(bot);
+                    newMsgs.push({ role: 'assistant', content: msg.content || 'جاري المعالجة...', tool_calls: msg.tool_calls });
+                    toolResults.forEach(function(tr) { newMsgs.push(tr); });
+                    
+                    return callAPIWithTools(bot, newMsgs);
+                }).then(function(choice2) {
+                    if(!choice2 || !running || paused) return;
+                    var resp = choice2.message.content || 'تمت المعالجة.';
+                    var c = cleanResp(resp);
+                    var mid = addMsg(c, bot.id, 'bot');
+                    var wait = getWait();
+                    setStatus('waiting');
+                    if(globalSpk) return speakText(c, bot, mid).then(function() { finishTurn(bots, wait); });
+                    finishTurn(bots, wait);
+                }).catch(function(e) {
+                    hideTyping();
+                    if(e.name !== 'AbortError') addMsg('❌ خطأ: '+e.message, null, 'system');
+                    setStatus('active');
+                    debateTimer = setTimeout(debateStep, 4000);
+                });
+            } else {
+                var c = cleanResp(msg.content || 'لا توجد إجابة.');
+                var mid = addMsg(c, bot.id, 'bot');
+                var wait = getWait();
+                setStatus('waiting');
+                if(globalSpk) return speakText(c, bot, mid).then(function() { finishTurn(bots, wait); });
+                finishTurn(bots, wait);
+            }
+        })
+        .catch(function(e) {
+            hideTyping();
+            if(e.name !== 'AbortError') {
+                var em = e.message || 'خطأ';
+                if(em.indexOf('Failed to fetch') >= 0) em = 'فشل الاتصال — تأكد من المفتاح';
+                addMsg('❌ خطأ ('+bot.name+'): '+em, null, 'system');
+            }
+            setStatus('active');
+            debateTimer = setTimeout(debateStep, 4000);
+        });
+    };
+    
+    if(extra > 0) setTimeout(go, extra); else go();
+}
+
+function finishTurn(bots, wait) {
+    turn = (turn + 1) % bots.length;
+    roundTurnCount++;
+    if(roundTurnCount >= bots.length) {
+        roundTurnCount = 0;
+        if(!roundInfinite && roundNumber >= totalRounds) {
+            updateRoundUI();
+            running = false;
+            paused = false;
+            if(debateTimer) clearTimeout(debateTimer);
+            setStatus('stopped');
+            sysMsg('🏁 اكتملت الجولة '+roundNumber+' من '+totalRounds+' — انتهت الجولات.');
+            var s2 = getSummarizer();
+            if(s2 && hist.length > 1) doSummary(s2, true);
+            return;
+        }
+        var finished = roundNumber;
+        roundNumber++;
+        updateRoundUI();
+        sysMsg('🔄 انتهت الجولة '+finished+' — تبدأ الجولة '+roundNumber+(roundInfinite?'':' من '+totalRounds));
+    }
+    updateRoundUI();
+    setStatus('active');
+    debateTimer = setTimeout(debateStep, wait);
+}
+
+function startDebate() {
+    topic = document.getElementById('topicInput').value.trim();
+    debateMode = document.getElementById('modeSelect').value;
+    if(!apiKey){ openSettings(); showKeyMsg('❌ أدخل مفتاح API','#ef4444'); return; }
+    if(!topic){ var inp=document.getElementById('topicInput'); inp.style.borderColor='#ef4444'; setTimeout(function(){ inp.style.borderColor='rgba(255,255,255,.1)' },2000); return; }
+    var bots=activeBots(); if(bots.length<2){ sysMsg('⚠️ فعّل بوتين على الأقل!'); return; }
+    newChat(false); running=true; paused=false; turn=0; roundNumber=1; roundTurnCount=0; msgsSinceSummary=0; updateRoundUI();
+    var mi=MODE_INFO[debateMode], names=bots.map(function(b){ return b.emoji+' '+b.name }).join('، ');
+    var s=getSummarizer(); if(s) names+=' + '+s.emoji+' '+s.name+' (كل '+s.summaryEvery+' رسائل)';
+    var tv=document.getElementById('timerSelect').value, tm=tv==='0'?'تلقائي':tv+' ثانية';
+    sysMsg((mi?mi.icon:'🎯')+' '+(mi?mi.label:'نقاش')+': "'+topic+'" — '+names+' ⏱ '+tm+' 🔄 '+(roundInfinite?'جولات مفتوحة':totalRounds+' جولات'));
+    var toolsCount = getEnabledToolsForAPI().length;
+    if (toolsCount > 0) sysMsg('🔧 ' + toolsCount + ' أداة مفعّلة');
+    setStatus('active');
+    debateTimer = setTimeout(debateStep, 800);
+}
+
+function pauseDebate(){
+    if(currentAppMode === 'task') { pauseTaskExecution(); return; }
+    if(!running) return; paused=true; if(abortC) try{ abortC.abort() } catch(e){} if(debateTimer) clearTimeout(debateTimer); stopSpk(); hideTyping(); setStatus('paused'); sysMsg('⏸ تم الإيقاف مؤقتاً')
+}
+function resumeDebate(){
+    if(currentAppMode === 'task') { resumeTaskExecution(); return; }
+    if(!running||!paused) return; paused=false; setStatus('active'); sysMsg('▶ تمت المتابعة'); if(currentAppMode === 'discussion') debateTimer=setTimeout(debateStep, 1200)
+}
+function newChat(){ running=false; paused=false; taskRunning=false; taskPaused=false; if(abortC) try{ abortC.abort() } catch(e){} if(taskAbortController) try{ taskAbortController.abort() } catch(e){} if(debateTimer) clearTimeout(debateTimer); stopSpk(); hideTyping(); hist=[]; msgN=0; turn=0; roundNumber=0; roundTurnCount=0; msgsSinceSummary=0; currentTaskData=null; updateTaskUI(); document.getElementById('chatArea').innerHTML='<div class="txc" style="padding:40px 10px" id="welcomeMsg"><div style="font-size:42px">🎭</div><div style="font-size:15px;font-weight:700;color:#ccc">ساحة النقاش والمهام الذكية</div><div style="font-size:11px;color:#666">اختر النمط المناسب وابدأ.</div></div>'; setStatus('stopped'); document.getElementById('pauseBtn').disabled=true; document.getElementById('resumeBtn').disabled=true; }
+function interrupt(){
+ var inp=document.getElementById('intInput'), msg=inp.value.trim(); if(!msg) return;
+ if(currentAppMode === 'task' && taskRunning) {
+     addMsg(msg,null,'user');
+     sysMsg('✋ تدخل المستخدم: "' + msg + '"');
+     inp.value='';
+     var anchor = findBot('anchor');
+     if(anchor) {
+         setStatus('typing', anchor.id);
+         showTyping(anchor);
+         var ctx = currentTaskData ? JSON.stringify(currentTaskData.subtasks.map(function(s){ return {id:s.id, title:s.title, status:s.status}; }), null, 2) : 'لا يوجد سياق';
+         callTaskAPI(anchor, [{ role: 'user', content: 'تدخل المستخدم: ' + msg + '\n\nالسياق الحالي:\n' + ctx + '\nردّ على التدخل.' }], 'integrator')
+             .then(function(choice) {
+                 hideTyping();
+                 if(choice && taskRunning) {
+                     var resp = choice.message.content || 'تم استلام التدخل.';
+                     addMsg(resp, anchor.id, 'bot');
+                 }
+                 if(taskRunning && !taskPaused) setStatus('active');
+             }).catch(function(e){ hideTyping(); if(e.name !== 'AbortError') sysMsg('❌ خطأ: '+e.message); });
+     }
+     return;
+ }
+ if(!running && !taskRunning){ sysMsg('⚠️ ابدأ العمل أولاً'); return }
+ if(currentAppMode === 'task') { sysMsg('⚠️ لا يوجد تنفيذ جارٍ'); return }
+ // وضع النقاش
+ if(abortC) try{ abortC.abort() } catch(e){} if(debateTimer) clearTimeout(debateTimer); stopSpk(); hideTyping(); paused=true; setStatus('interrupt'); addMsg(msg,null,'user'); inp.value=''; sysMsg('✋ تدخل المستخدم — البوتات تردّ...');
+ var bots=activeBots(), idx=0; function next(){ if(idx>=Math.min(bots.length,3)){ paused=false; setStatus('active'); if(currentAppMode === 'discussion') debateTimer=setTimeout(debateStep,2500); return } var bot=bots[idx++]; if(!rCan(bot.model)){ next(); return } showTyping(bot); setStatus('typing',bot.id); callAPIWithTools(bot, buildMsgs(bot, true, msg)).then(function(choice){ hideTyping(); if(!choice || !running || paused) { next(); return } var resp = choice.message.content || 'تم الرد.'; var c=cleanResp(resp); var mid=addMsg(c,bot.id,'bot'); if(globalSpk) return speakText(c,bot,mid).then(function(){ return sleep(600) }).then(next); return sleep(600).then(next) }).catch(function(e){ hideTyping(); if(e.name!=='AbortError') addMsg('❌ '+bot.name+': '+e.message,null,'system'); next() }) } next()
+}
+
+/* ===== دوال الملخص ===== */
+function triggerSummary(){ var s=getSummarizer(); if(!s){ sysMsg('💡 فعّل "الملخّص" أولاً'); return } if(hist.length<2){ sysMsg('⚠️ لا يوجد ما يكفي للتلخيص'); return } if(!running){ doSummary(s,true); return } var was=paused; if(debateTimer) clearTimeout(debateTimer); doSummary(s,false,function(){ if(!was){ paused=false; setStatus('active'); if(currentAppMode==='discussion') debateTimer=setTimeout(debateStep,getWait()) } }) }
+function buildSummaryMsgs(s){ var mi=MODE_INFO[debateMode], ctx='نوع الجلسة: '+(mi?mi.label:'نقاش')+'\nالجولة الحالية: '+roundNumber+(roundInfinite?'':' من '+totalRounds)+'\nالموضوع: "'+topic+'"\n'+dimensionsPrompt()+'\n\nما قيل:\n'; for(var i=0;i<hist.length;i++) ctx+=hist[i].content+'\n'; ctx+='\nلخّص الجلسة.'; return [{role:'user',content:ctx}] }
+function doSummary(s,standalone,cb){ setStatus('summary'); showTyping(s); callAPIWithTools(s, buildSummaryMsgs(s)).then(function(choice){ hideTyping(); if(!choice) { if(cb) cb(); return } var resp = choice.message.content || 'لا يوجد ملخص.'; var c=cleanResp(resp); var id=addMsg(c,s.id,'summary'); msgsSinceSummary=0; if(globalSpk) return speakText(c,s,id).then(function(){ if(cb) cb() }); if(cb) cb() }).catch(function(e){ hideTyping(); if(e.name!=='AbortError') sysMsg('❌ خطأ: '+e.message); if(cb) cb() }) }
+
+/* ===== دوال الإعدادات ===== */
+function toggleSpeaker(){ globalSpk=!globalSpk; var i=document.getElementById('spkIcon'), l=document.getElementById('spkLabel'), b=document.getElementById('spkBtn'); if(globalSpk){ i.textContent='🔊'; l.textContent='الصوت مفعّل'; l.style.color='#86efac'; b.style.borderColor='rgba(34,197,94,.4)' } else { i.textContent='🔇'; l.textContent='الصوت'; l.style.color='#9ca3af'; b.style.borderColor='rgba(255,255,255,.08)'; stopSpk() } }
+function cycleSpeed(){ var m=['eco','normal','turbo'], lab=['🐢 اقتصادي','🚗 عادي','🚀 سريع'], i=m.indexOf(spdMode); i=(i+1)%3; spdMode=m[i]; document.getElementById('speedBtn').textContent=lab[i] }
+function openSettings(){ document.getElementById('settingsModal').classList.add('open'); document.getElementById('apiKeyInput').value=apiKey||'' }
+function closeSettings(){ document.getElementById('settingsModal').classList.remove('open') }
+function saveKey(){ var k=document.getElementById('apiKeyInput').value.trim(); if(!k){ showKeyMsg('❌ أدخل المفتاح','#ef4444'); return } apiKey=k; try{ localStorage.setItem('api_key',k) } catch(e){} showKeyMsg('✅ تم الحفظ!','#22c55e') }
+function showKeyMsg(m,c){ var e=document.getElementById('keyStatus'); e.textContent=m; e.style.color=c; setTimeout(function(){ e.textContent='' },3000) }
+
+/* ===== دوال التصدير ===== */
+function openExportMenu(){ var e=document.getElementById('exportPanel'); e.style.display=e.style.display==='none'?'block':'none' }
+function showSessionStats(){ var e=document.getElementById('analyticsPanel'); e.style.display=e.style.display==='none'?'block':'none'; if(e.style.display==='block') renderSessionStats() }
+function sessionRows(){ return hist.map(function(m,i){ return {n:i+1,name:m.name||'غير معروف',role:m.role==='user'?'المستخدم':'مشارك',text:m.text||m.content||''} }) }
+function renderSessionStats(){ var rows=sessionRows(), counts={}; rows.forEach(function(r){ counts[r.name]=(counts[r.name]||0)+1 }); var avg=rows.length?Math.round(rows.reduce(function(a,r){ return a+r.text.length },0)/rows.length):0; var html='<div class="stat-grid"><div class="stat-card"><b>'+rows.length+'</b><span>رسالة</span></div><div class="stat-card"><b>'+roundNumber+'</b><span>جولات</span></div><div class="stat-card"><b>'+avg+'</b><span>متوسط الحروف</span></div></div>'; html+='<div class="table-wrap"><table dir="rtl"><thead><tr><th>المشارك</th><th>عدد المداخلات</th></tr></thead><tbody>'; Object.keys(counts).forEach(function(k){ html+='<tr><td>'+escH(k)+'</td><td>'+counts[k]+'</td></tr>' }); html+='</tbody></table></div>'; document.getElementById('analyticsContent').innerHTML=html }
+function downloadBlob(content,type,name){ var blob=new Blob([content],{type:type+';charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(function(){ URL.revokeObjectURL(url) },1200) }
+function exportChat(format){ if(!hist.length){ sysMsg('📭 لا توجد محادثة'); return } var mi=MODE_INFO[debateMode], l=LENSES.find(function(x){ return x.id===selectedLens }), avg=Math.round(DIMENSIONS.reduce(function(a,d){ return a+d.value },0)/DIMENSIONS.length); var title='ساحة النقاش والمهام الذكية', meta={title:title,type:mi?mi.label:debateMode,topic:topic,rounds:roundInfinite?'∞':totalRounds,currentRound:roundNumber,lens:l?l.name:'متوازن',thinkingAverage:avg}; if(format==='json'){ downloadBlob(JSON.stringify({meta:meta,messages:hist},null,2),'application/json','session_'+Date.now()+'.json'); return } if(format==='csv'){ var lines=['الرقم,المشارك,الدور,النص']; hist.forEach(function(m,i){ var t=(m.text||m.content||'').replace(/"/g,'""').replace(/\n/g,' '); lines.push((i+1)+',"'+(m.name||'').replace(/"/g,'""')+'","'+(m.role==='user'?'المستخدم':'مشارك')+'","'+t+'"') }); downloadBlob('\ufeff'+lines.join('\n'),'text/csv','session_'+Date.now()+'.csv'); return } if(format==='txt'){ var RLM='\u200F'; var txt=RLM+title+'\n'+RLM+'='.repeat(30)+'\n'+RLM+'النوع: '+meta.type+'\n'+RLM+'الموضوع: '+meta.topic+'\n'+RLM+'الجولات: '+meta.rounds+'\n'+RLM+'العدسة: '+meta.lens+'\n'+RLM+'متوسط أبعاد التفكير: '+avg+'%\n\n'; hist.forEach(function(m,i){ txt+=RLM+(i+1)+'. '+(m.name||'المستخدم')+'\n'+RLM+(m.text||m.content||'')+'\n\n' }); downloadBlob('\ufeff'+txt,'text/plain','session_'+Date.now()+'.txt'); return } var html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>'+escH(title)+'</title><style>body{font-family:Cairo,Arial,sans-serif;background:#f4f6fb;color:#172033;margin:0;padding:30px;direction:rtl}main{max-width:900px;margin:auto;background:#fff;padding:28px;border-radius:18px}h1{margin-top:0;color:#4f46e5}.meta{background:#f7f7fb;padding:14px;border-radius:12px;margin-bottom:18px}.msg{padding:12px 14px;border-bottom:1px solid #e8eaf0;line-height:1.9}.name{font-weight:700;color:#4f46e5;margin-bottom:4px}.num{color:#888;font-size:12px}</style></head><body><main><h1>⚡ '+escH(title)+'</h1><div class="meta">🎯 النوع: '+escH(meta.type)+'<br>📝 الموضوع: '+escH(meta.topic)+'<br>🔄 الجولات: '+meta.rounds+'<br>🔭 العدسة: '+escH(meta.lens)+'<br>🧠 متوسط أبعاد التفكير: '+avg+'%</div>'; hist.forEach(function(m,i){ html+='<section class="msg"><div class="num">#'+(i+1)+'</div><div class="name">'+escH(m.name||'المستخدم')+'</div><div>'+escH(m.text||m.content||'').replace(/\n/g,'<br>')+'</div></section>' }); html+='</main></body></html>'; downloadBlob(html,'text/html','session_'+Date.now()+'.html') }
+
+/* ===== دوال حدود الطلبات ===== */
+function updateRateBars(){ var el=document.getElementById('rateBars'); if(!el) return; var bots=activeBots(), html=''; bots.forEach(function(b){ var c=rCount(b.model), p=Math.min(100,Math.round(c/40*100)), clr=p>=80?'#ef4444':p>=50?'#eab308':'#22c55e'; html+='<div class="rate-item"><div class="rate-label"><span style="color:'+b.color+'">'+b.emoji+' '+b.name+'</span><span style="color:#666">'+c+'/40</span></div><div class="rate-track"><div class="rate-fill" style="width:'+p+'%;background:'+clr+'"></div></div></div>' }); el.innerHTML=html }
+setInterval(updateRateBars,3000);
+
+/* ===== أدوات MCP ===== */
+async function loadMCPTools() {
+    var listEl = document.getElementById('toolsList');
+    var statusEl = document.getElementById('mcpStatus');
+    var mcpUrl = document.getElementById('mcpUrl')?.value || MCP_URL;
+    
+    listEl.innerHTML = '<div style="text-align:center;color:#6b7280;padding:16px;font-size:13px;">⏳ جارٍ التحميل...</div>';
+    statusEl.textContent = '⏳ جارٍ التحميل...';
+    
+    try {
+        var endpoints = ['/tools', '/list_tools', '/api/tools', '/mcp/tools'];
+        var tools = null;
+        
+        for (var ei = 0; ei < endpoints.length; ei++) {
+            try {
+                var response = await fetch(mcpUrl + endpoints[ei], {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (response.ok) {
+                    var data = await response.json();
+                    tools = extractToolsFromData(data);
+                    if (tools && tools.length > 0) break;
+                }
+            } catch (e) { /* تجاهل */ }
+        }
+        
+        if (!tools || tools.length === 0) {
+            tools = getFallbackTools();
+        }
+        
+        mcpTools = tools;
+        renderToolsList();
+        updateActiveBadges();
+        updateMCPStatus('✅ ' + tools.length + ' أداة متاحة', '#6ee7b7');
+        
+        localStorage.setItem('enabled_mcp_tools', JSON.stringify(enabledMCPTools));
+        
+    } catch (error) {
+        listEl.innerHTML = '<div style="text-align:center;color:#f87171;padding:16px;font-size:13px;">❌ فشل: ' + escH(error.message) + '</div>';
+        updateMCPStatus('❌ فشل التحميل', '#f87171');
+    }
+}
+
+function extractToolsFromData(data) {
+    var possibleKeys = ['tools', 'functions', 'operations', 'actions', 'items', 'data'];
+    for (var ki = 0; ki < possibleKeys.length; ki++) {
+        var key = possibleKeys[ki];
+        if (data[key] && Array.isArray(data[key])) {
+            return data[key].map(function(t) {
+                return {
+                    name: t.name || t.id || 'unknown',
+                    description: t.description || t.desc || '',
+                    parameters: t.parameters || t.params || { type: 'object', properties: {} }
+                };
+            });
+        }
+    }
+    if (Array.isArray(data)) {
+        return data.map(function(t) {
+            return {
+                name: t.name || t.id || 'unknown',
+                description: t.description || t.desc || '',
+                parameters: t.parameters || t.params || { type: 'object', properties: {} }
+            };
+        });
+    }
+    for (var key2 in data) {
+        if (data[key2] && typeof data[key2] === 'object') {
+            var nested = extractToolsFromData(data[key2]);
+            if (nested && nested.length > 0) return nested;
+        }
+    }
+    return [];
+}
+
+function getFallbackTools() {
+    return [
+        { name: 'calculate', description: 'عمليات حسابية', parameters: { type: 'object', properties: { expression: { type: 'string' } } } },
+        { name: 'web_search', description: 'البحث في الويب', parameters: { type: 'object', properties: { query: { type: 'string' } } } },
+        { name: 'get_time', description: 'الوقت والتاريخ', parameters: { type: 'object', properties: {} } }
+    ];
+}
+
+function renderToolsList() {
+    var container = document.getElementById('toolsList');
+    if (!mcpTools || mcpTools.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:#6b7280;padding:16px;font-size:13px;">📭 لا توجد أدوات</div>';
+        return;
+    }
+    container.innerHTML = mcpTools.map(function(tool, index) {
+        var isEnabled = enabledMCPTools.indexOf(tool.name) !== -1;
+        return `
+            <div class="tool-item" data-index="${index}">
+                <div class="info">
+                    <div class="name">${escH(tool.name)}</div>
+                    <div class="desc">${escH(tool.description || 'بدون وصف')}</div>
+                </div>
+                <button class="tool-test-btn" onclick="testMCPTool(${index})">🧪</button>
+                <label class="switch">
+                    <input type="checkbox" ${isEnabled ? 'checked' : ''} 
+                           onchange="toggleMCPTool(${index}, this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleMCPTool(index, enabled) {
+    var tool = mcpTools[index];
+    if (!tool) return;
+    if (enabled) {
+        if (enabledMCPTools.indexOf(tool.name) === -1) enabledMCPTools.push(tool.name);
+    } else {
+        var idx = enabledMCPTools.indexOf(tool.name);
+        if (idx !== -1) enabledMCPTools.splice(idx, 1);
+    }
+    localStorage.setItem('enabled_mcp_tools', JSON.stringify(enabledMCPTools));
+    updateActiveBadges();
+    sysMsg('🔧 ' + enabledMCPTools.length + ' أداة مفعّلة');
+}
+
+function updateActiveBadges() {
+    var container = document.getElementById('activeToolsBadge');
+    var enabled = mcpTools.filter(function(t) { return enabledMCPTools.indexOf(t.name) !== -1; });
+    if (enabled.length === 0) {
+        container.innerHTML = '<span style="font-size:10px;color:#6b7280;">لا توجد أدوات مفعّلة</span>';
+        return;
+    }
+    container.innerHTML = enabled.map(function(t) {
+        return '<span class="tool-badge active">' + escH(t.name) + '</span>';
+    }).join('');
+}
+
+function updateMCPStatus(text, color) {
+    var el = document.getElementById('mcpStatus');
+    if (el) { el.textContent = text; el.style.color = color || '#6b7280'; }
+}
+
+async function testMCPTool(index) {
+    var tool = mcpTools[index];
+    if (!tool) return;
+    var sampleParams = {};
+    var props = tool.parameters?.properties || {};
+    var required = tool.parameters?.required || [];
+    for (var ri = 0; ri < required.length; ri++) {
+        var key = required[ri];
+        var prop = props[key];
+        if (!prop) continue;
+        if (prop.type === 'string') sampleParams[key] = 'نموذج';
+        else if (prop.type === 'number' || prop.type === 'integer') sampleParams[key] = 0;
+        else if (prop.type === 'boolean') sampleParams[key] = false;
+        else if (prop.type === 'array') sampleParams[key] = [];
+        else if (prop.type === 'object') sampleParams[key] = {};
+        else sampleParams[key] = 'قيمة';
+    }
+    addToolMessage('🧪 اختبار: ' + tool.name, 'جاري التنفيذ...', false);
+    try {
+        var result = await callMCPTool(tool.name, sampleParams);
+        var resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        addToolMessage('✅ نتيجة ' + tool.name, resultStr, false);
+    } catch (error) {
+        addToolMessage('❌ فشل ' + tool.name, error.message, true);
+    }
+}
+
+async function testMCPConnection() {
+    var mcpUrl = document.getElementById('mcpUrl')?.value || MCP_URL;
+    var statusEl = document.getElementById('mcpStatusSettings');
+    if (statusEl) { statusEl.textContent = '⏳ جارٍ الاختبار...'; statusEl.style.color = '#fbbf24'; }
+    try {
+        var response = await fetch(mcpUrl + '/health', { method: 'GET', signal: AbortSignal.timeout(3000) });
+        if (response.ok) {
+            if (statusEl) { statusEl.textContent = '✅ MCP متصل!'; statusEl.style.color = '#22c55e'; }
+            sysMsg('🔌 MCP متصل!');
+            loadMCPTools();
+        } else {
+            if (statusEl) { statusEl.textContent = '⚠️ MCP غير متاح (HTTP ' + response.status + ')'; statusEl.style.color = '#fbbf24'; }
+        }
+    } catch (e) {
+        if (statusEl) { statusEl.textContent = '❌ فشل: ' + e.message; statusEl.style.color = '#f87171'; }
+    }
+}
+
+/* ===== تهيئة واجهة الأدوات ===== */
+function initToolsUI() {
+    var toggleBtn = document.getElementById('toolsToggleBtn');
+    var popup = document.getElementById('toolsPopup');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            popup.classList.toggle('hidden');
+            if (!popup.classList.contains('hidden') && mcpTools.length === 0) {
+                loadMCPTools();
+            }
+        });
+    }
+    document.addEventListener('click', function(e) {
+        if (popup && !popup.classList.contains('hidden')) {
+            var target = e.target;
+            if (!popup.contains(target) && target !== toggleBtn) {
+                popup.classList.add('hidden');
+            }
+        }
+    });
+    setTimeout(function() { loadMCPTools(); }, 1000);
+}
+
+/* ===== تهيئة التطبيق ===== */
+try {
+    var saved = localStorage.getItem('api_key');
+    if (saved) { apiKey = saved; document.getElementById('apiKeyInput').value = saved; }
+} catch(e) {}
+
+renderBots();
+renderDimensions();
+renderLenses();
+renderModes();
+renderRounds();
+updateRateBars();
+initToolsUI();
+
+currentTaskData = null;
+updateTaskUI();
+
+console.log('✅ ساحة النقاش + نظام تنفيذ المهام بقيادة المذيع جاهزة!');
+</script>
+</body>
+</html>
